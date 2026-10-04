@@ -12,8 +12,9 @@ Clerk session JWT; the user ID comes from the verified token.
 
 Core stores project metadata. All project endpoints require a Clerk session JWT and
 use its verified `sub` claim to scope access to the owning user. A project owned by
-another user is returned as `PROJECT_NOT_FOUND` (`404`). Project creation does not
-create a source-code workspace yet; that belongs to Breeze Workspace.
+another user is returned as `PROJECT_NOT_FOUND` (`404`). Project creation records
+a Temporal workflow-start request in the same database transaction as the project.
+It does not create a source-code workspace yet; that belongs to Breeze Workspace.
 
 | Method | Path | Action |
 | --- | --- | --- |
@@ -27,7 +28,8 @@ Create and update accept a required `name` (up to 255 characters) and optional
 `description` (up to 2000 characters). Delete currently removes Core metadata;
 cross-service cleanup will be coordinated when Workspace project creation exists.
 `workSpaceInitializedOn` is read-only and remains null until Workspace creation is
-confirmed through the future Temporal workflow.
+confirmed. A Workspace creation API and Temporal worker are not implemented yet,
+so a started workflow remains queued rather than completing initialization.
 
 ## Stack
 
@@ -58,21 +60,41 @@ CLERK_ALLOWED_AUTHORIZED_PARTIES=http://localhost:3000
 CLERK_SECRET_KEY=sk_replace-me
 ```
 
-`CLERK_SECRET_KEY` is needed only for the background Clerk profile-sync worker. Without it,
-provisioning still succeeds and the outbox retains pending work; the worker logs one warning
-and does not claim events. Keep the real key in the ignored `.env` or your secret manager.
+`CLERK_SECRET_KEY` is needed only for Clerk profile synchronization. Without it,
+provisioning still succeeds and profile-sync events remain pending; project
+initialization events can still be sent to Temporal. Keep the real key in the
+ignored `.env` or your secret manager.
 
-## Profile-sync outbox
+## Outbox and Temporal
 
 Provisioning commits the Core user and one initial profile-sync event together. A dedicated
-Resilience4j `ThreadPoolBulkhead` claims events with PostgreSQL `SKIP LOCKED`, calls Clerk
-outside the claim transaction, and retries failures with a lease and bounded backoff.
+Resilience4j `ThreadPoolBulkhead` claims events with PostgreSQL `SKIP LOCKED`, performs
+remote calls outside the claim transaction, and retries failures with a lease and
+bounded backoff. Project creation similarly commits project metadata and a Temporal
+workflow-start event together. The worker uses the workflow ID
+`project-initialization-{projectId}` so delivery retries do not create a second run.
+Completing the outbox event means Temporal accepted the start, not that a Workspace
+exists.
+
+Core connects to `localhost:7233` in Temporal's `default` namespace by default and
+starts `ProjectInitialization` on the `breeze-project-initialization` task queue.
+Override these with `BREEZE_TEMPORAL_TARGET`, `BREEZE_TEMPORAL_NAMESPACE`, and
+`BREEZE_TEMPORAL_PROJECT_TASK_QUEUE`. Until a worker registers that workflow and
+the Workspace creation contract exists, do not treat the queued workflow as
+successful project initialization.
+
 The bulkhead has no in-memory queue, so a busy pool leaves work in PostgreSQL. Configure it
 with `BREEZE_OUTBOX_WORKER_THREADS` (default `1`). Optional tuning variables are
 `BREEZE_OUTBOX_POLL_INTERVAL_MS` (`1000`), `BREEZE_OUTBOX_LEASE_SECONDS` (`60`),
 `BREEZE_OUTBOX_MAX_ATTEMPTS` (`5`), and `BREEZE_OUTBOX_RETRY_BASE_SECONDS` (`5`).
 Restart Core after changing these settings. Existing `PENDING` users created before this
 migration receive an event on their next provisioning request.
+
+## Collaboration
+
+Make future changes on feature branches and propose them through pull requests
+targeting `main`. The repository's `main` branch requires a PR; do not push to
+it directly or merge a PR on the reviewer's behalf.
 
 ## Run locally
 

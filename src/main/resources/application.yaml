@@ -23,3 +23,7 @@ breeze:
     lease-seconds: ${BREEZE_OUTBOX_LEASE_SECONDS:60}
     max-attempts: ${BREEZE_OUTBOX_MAX_ATTEMPTS:5}
     retry-base-seconds: ${BREEZE_OUTBOX_RETRY_BASE_SECONDS:5}
+  temporal:
+    target: ${BREEZE_TEMPORAL_TARGET:localhost:7233}
+    namespace: ${BREEZE_TEMPORAL_NAMESPACE:default}
+    project-initialization-task-queue: ${BREEZE_TEMPORAL_PROJECT_TASK_QUEUE:breeze-project-initialization}

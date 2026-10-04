@@ -10,6 +10,7 @@ import dev.chirag45.breeze_core.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
@@ -30,6 +31,9 @@ class ProjectCrudTests {
     @Autowired
     private UserRepository userRepository;
 
+    @Autowired
+    private JdbcTemplate jdbc;
+
     @Test
     void ownerCanCreateReadUpdateAndDeleteProject() {
         UserEntity owner = userRepository.saveAndFlush(new UserEntity("project_crud_owner"));
@@ -45,6 +49,14 @@ class ProjectCrudTests {
         assertThat(created.description()).isEqualTo("Initial description");
         assertThat(created.workSpaceInitializedOn()).isNull();
         assertThat(created.createdAt()).isNotNull();
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM outbox_events
+                WHERE event_type = 'PROJECT_WORKSPACE_INITIALIZATION_REQUESTED'
+                  AND aggregate_id = ?
+                  AND payload ->> 'name' = 'Sample API'
+                  AND payload ->> 'description' = 'Initial description'
+                  AND payload ->> 'ownerUserId' = ?
+                """, Integer.class, created.id(), owner.getId().toString())).isEqualTo(1);
         assertThat(projectService.list(owner.getClerkUserId())).containsExactly(created);
         assertThat(projectService.get(owner.getClerkUserId(), created.id())).isEqualTo(created);
 

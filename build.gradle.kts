@@ -33,6 +33,7 @@ dependencies {
 	implementation("com.github.f4b6a3:uuid-creator:6.1.1")
 	implementation("io.github.resilience4j:resilience4j-bulkhead:2.4.0")
 	implementation("me.paulschwarz:spring-dotenv:4.0.0")
+	implementation("io.temporal:temporal-sdk:1.40.0")
 	compileOnly("org.projectlombok:lombok")
 	runtimeOnly("org.postgresql:postgresql")
 	annotationProcessor("org.projectlombok:lombok")
