@@ -8,6 +8,9 @@ import dev.chirag45.breeze_core.exception.CoreUserNotProvisionedException;
 import dev.chirag45.breeze_core.exception.ProjectNotFoundException;
 import dev.chirag45.breeze_core.repository.ProjectRepository;
 import dev.chirag45.breeze_core.repository.UserRepository;
+import dev.chirag45.breeze_core.outbox.OutboxStore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,12 +21,16 @@ import java.util.UUID;
 @Transactional(readOnly = true)
 public class ProjectService {
 
+    private static final Logger log = LoggerFactory.getLogger(ProjectService.class);
+
     private final ProjectRepository projectRepository;
     private final UserRepository userRepository;
+    private final OutboxStore outboxStore;
 
-    public ProjectService(ProjectRepository projectRepository, UserRepository userRepository) {
+    public ProjectService(ProjectRepository projectRepository, UserRepository userRepository, OutboxStore outboxStore) {
         this.projectRepository = projectRepository;
         this.userRepository = userRepository;
+        this.outboxStore = outboxStore;
     }
 
     @Transactional
@@ -31,7 +38,11 @@ public class ProjectService {
         UserEntity owner = userRepository.findByClerkUserId(clerkUserId)
                 .orElseThrow(CoreUserNotProvisionedException::new);
         ProjectEntity project = new ProjectEntity(owner, request.name().strip(), request.description());
-        return ProjectResponse.from(projectRepository.saveAndFlush(project));
+        ProjectEntity saved = projectRepository.saveAndFlush(project);
+        outboxStore.requestProjectInitialization(saved);
+        log.debug("project_initialization_outbox_requested projectId={} ownerUserId={}",
+                saved.getId(), owner.getId());
+        return ProjectResponse.from(saved);
     }
 
     public List<ProjectResponse> list(String clerkUserId) {

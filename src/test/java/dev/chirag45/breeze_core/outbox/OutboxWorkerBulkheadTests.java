@@ -1,6 +1,7 @@
 package dev.chirag45.breeze_core.outbox;
 
 import dev.chirag45.breeze_core.repository.UserRepository;
+import dev.chirag45.breeze_core.temporal.ProjectInitializationStarter;
 import io.github.resilience4j.bulkhead.ThreadPoolBulkhead;
 import org.junit.jupiter.api.Test;
 
@@ -29,7 +30,7 @@ class OutboxWorkerBulkheadTests {
         CountDownLatch claimStarted = new CountDownLatch(1);
         CountDownLatch releaseClaim = new CountDownLatch(1);
         AtomicReference<String> workerThread = new AtomicReference<>();
-        when(store.claim(anyString(), eq(60), eq(5))).thenAnswer(invocation -> {
+        when(store.claim(anyString(), eq(60), eq(5), eq(true))).thenAnswer(invocation -> {
             workerThread.set(Thread.currentThread().getName());
             claimStarted.countDown();
             releaseClaim.await(5, TimeUnit.SECONDS);
@@ -39,13 +40,14 @@ class OutboxWorkerBulkheadTests {
         ThreadPoolBulkhead bulkhead = new OutboxConfig().outboxBulkhead(properties);
         try {
             OutboxWorker worker = new OutboxWorker(
-                    store, mock(UserRepository.class), clerk, bulkhead, properties, "test-instance");
+                    store, mock(UserRepository.class), clerk, mock(ProjectInitializationStarter.class),
+                    bulkhead, properties, "test-instance");
 
             worker.poll();
             assertThat(claimStarted.await(5, TimeUnit.SECONDS)).isTrue();
             worker.poll();
 
-            verify(store).claim(anyString(), eq(60), eq(5));
+            verify(store).claim(anyString(), eq(60), eq(5), eq(true));
             assertThat(workerThread.get()).isNotEqualTo(Thread.currentThread().getName());
         } finally {
             releaseClaim.countDown();

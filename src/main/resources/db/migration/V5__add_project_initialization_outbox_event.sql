@@ -1,0 +1,3 @@
+ALTER TABLE outbox_events DROP CONSTRAINT ck_outbox_events_type;
+ALTER TABLE outbox_events ADD CONSTRAINT ck_outbox_events_type
+    CHECK (event_type IN ('USER_PROFILE_SYNC_REQUESTED', 'PROJECT_WORKSPACE_INITIALIZATION_REQUESTED'));

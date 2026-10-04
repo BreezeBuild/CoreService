@@ -5,6 +5,8 @@ import dev.chirag45.breeze_core.dto.response.ProjectResponse;
 import dev.chirag45.breeze_core.dto.response.wrapper.ApiResponse;
 import dev.chirag45.breeze_core.services.ProjectService;
 import jakarta.validation.Valid;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -24,6 +26,8 @@ import java.util.UUID;
 @RequestMapping("/api/projects")
 public class ProjectController {
 
+    private static final Logger log = LoggerFactory.getLogger(ProjectController.class);
+
     private final ProjectService projectService;
 
     public ProjectController(ProjectService projectService) {
@@ -35,14 +39,18 @@ public class ProjectController {
             JwtAuthenticationToken authentication,
             @Valid @RequestBody ProjectUpsertRequest request
     ) {
+        log.debug("project_creation_requested");
         ProjectResponse project = projectService.create(authentication.getToken().getSubject(), request);
+        log.info("project_created projectId={} ownerUserId={}", project.id(), project.ownerUserId());
         return ResponseEntity.created(URI.create("/api/projects/" + project.id()))
                 .body(ApiResponse.success(project, "Project created."));
     }
 
     @GetMapping
     public ApiResponse<List<ProjectResponse>> list(JwtAuthenticationToken authentication) {
-        return ApiResponse.success(projectService.list(authentication.getToken().getSubject()));
+        List<ProjectResponse> projects = projectService.list(authentication.getToken().getSubject());
+        log.debug("projects_listed count={}", projects.size());
+        return ApiResponse.success(projects);
     }
 
     @GetMapping("/{projectId}")
@@ -50,7 +58,9 @@ public class ProjectController {
             JwtAuthenticationToken authentication,
             @PathVariable UUID projectId
     ) {
-        return ApiResponse.success(projectService.get(authentication.getToken().getSubject(), projectId));
+        ProjectResponse project = projectService.get(authentication.getToken().getSubject(), projectId);
+        log.debug("project_read projectId={}", projectId);
+        return ApiResponse.success(project);
     }
 
     @PutMapping("/{projectId}")
@@ -59,7 +69,9 @@ public class ProjectController {
             @PathVariable UUID projectId,
             @Valid @RequestBody ProjectUpsertRequest request
     ) {
-        return ApiResponse.success(projectService.update(authentication.getToken().getSubject(), projectId, request));
+        ProjectResponse project = projectService.update(authentication.getToken().getSubject(), projectId, request);
+        log.info("project_updated projectId={}", projectId);
+        return ApiResponse.success(project);
     }
 
     @DeleteMapping("/{projectId}")
@@ -68,6 +80,7 @@ public class ProjectController {
             @PathVariable UUID projectId
     ) {
         projectService.delete(authentication.getToken().getSubject(), projectId);
+        log.info("project_deleted projectId={}", projectId);
         return ResponseEntity.noContent().build();
     }
 }
